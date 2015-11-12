@@ -185,9 +185,13 @@ Let's now just get the hash values and sort them. This is the result:
 Remember that the range was [0, 1664). Given that we used a cryptographic hash, we expect these values to be uniformly distributed across that range. They look like it at glance, and obviously it gets much better with real-world data sets which are much larger. If we plot these values, we can double-check the distribution:
 
 
-Let's compress
+## Let's compress
 
 We now want to compress this set of number in the most efficient way. General purpose algorithms like zlib are obviously the wrong choice here, since they work by finding repetition of strings, and the 16-bit or 32-bit encoding of the above numbers would look like random data to zlib. Some compression theory comes to the rescue: the best way to compress an unordered uniform data set is to compute the array of differences, which will be a geometric distribution, and then use the Golomb encoding. Did I lose you? Let's see it one step at a time.
+
+この構造体を最も効率よく圧縮したい。 zlib のような方式はここでは向かない。
+
+
 
 If we compute the increments (differences) between a uniformly distribute set of values, the result is a geometric distribution. Recall that we originally decided for a range of exactly 26x64, and then we picked 26 uniformly distributed values within it. If you were to bet on the most likely distance between a value and the next one, wouldn't you say "64"? Yes. And we can argue that most distances are going to be numbers pretty close to the value 64, and far larger values are extremely unlikely. This intuition matches with the geometric distribution (whose correspondent in the continuos domain is the exponential distribution).
 
