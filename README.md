@@ -116,6 +116,11 @@ HTTP のペイロードに載せることを考えれば、計算量よりもデ
 
 ただし、計算量を追加することで、より論理的な限界までこれを圧縮するというのが Golomb Coded Set(GCS) です。
 
+https://en.wikipedia.org/wiki/Bloom_filter
+http://corte.si/posts/code/bloom-filter-rules-of-thumb/
+http://hur.st/bloomfilter?n=4&p=1.0E-20
+http://pages.cs.wisc.edu/~cao/papers/summary-cache/node8.html
+http://stackoverflow.com/questions/658439/how-many-hash-functions-does-my-bloom-filter-need
 
 ## Golomb Coded Set(GCS)
 
@@ -193,44 +198,182 @@ Golomb Coded Set は、この性質を利用して、配列を圧縮する。
 128~191 は 110+6bit で 9bit
 
 64 に近い値が多いという前提であれば、これで多くの値が小さくエンコードできることがわかるはずである。
+
+個の値を求めて
+
+```
+距離  商  余   Golomb encoding
+151    2  23      110 010111
+ 41    0  41        0 101001
+ 16    0  16        0 010000
+ 61    0  61        0 111101
+192    3   0     1110 000000
+ 51    0  51        0 110011
+.
+.
+```
+
+全部つなげれば良い
+
+```
+11001011 10101001 00100000 11110111 10000000 0110011...
+```
+
+
+元に戻すには 0 がくるまで 1 を並べ、その後固定長(ここでは 6bit) とって逆算すれば、順番にハッシュが取得できる。
+
+
+
+
 これが基本的なアイデア。
 
 
 [翻訳](http://qiita.com/Jxck_/private/aae8afc5ec9ee7518197)
 
 
+# cache aware server push と casper cookie
+
+で、 kazuho さんはこれを使って push 済みのファイル(Path+Etag)情報を圧縮し、 Cookie につけてクライアントに送る。クライアントから来る Cookie の情報から Push するかしないかを判断するという方法を思いつき、それを h2o に実装しました。
+
+これが Cache Aware Server Push と呼ばれる手法で、その Cookie を casper cookie と言います。
+
+実際 h2o のデモページではその Cookie が付与されていました。
+
+
+この方法を #http2study でやった 「http2/quic meetup」でデモしました。その場には
+httpbis の chair (http2 の一番エラい人) である mnot
+chrome に quic を実装してる jana
+firefox に http2 を実装した martin
+protocol sec のヤバい人 EKR
+etc とガチ勢中のガチ勢がいたのですが、でデモしたところ大好評となりました。
+
+そこで「これは Cookie より別途ヘッダがあった方がいい」「ドラフト書け」みたいな話になって kazuho さんが書いたドラフトが Cache fingerprinting for HTTP です。
 
 
 # cache fingerprinting
 
-cache fingerprinting とは、 server が投機的な push をすべきかどうかを知るために仕様することができます。
+Cache Fingerprinting では、以下の二つのヘッダが定義されています。
 
-http2 の push はサーバが投機的に行うが、クライアントがすでにそのリソースをキャッシュしているかを知る方法はない。
-この仕様は、 HTTP ヘッダにその情報を含むことでより効率的に push することを目的とする。
+- Cache-Fingerprint-Key
+- Cache-FIngerprint
 
 
-# Cache-Fingerprint-Key ヘッダ
+## Cache-Fingerprint-Key
 
-"Cache-Fingerprint-Key" は fingerprint key を表す decimal number を値とする。
+この値が、各ファイルごとのハッシュ値になります。
+casper cookie の頃は、 Path+Etag の sha1 hash でしたが、
+この値を別のロジックで出すことで最適化できる可能性もあるため、
+仕様上この値の導出は明記されていません。実装依存です。
 
-```
-Cache-Fingerprint-Key: 12345
-```
+値が uint32 (0~2^32) までとだけ定義されています。
+
 
 # Cache-Fingerprint Header Field
 
-user agent はキャッシュしたレスポンスの fingerprint key を集め、Cache-Fingerprint ヘッダで送る。
+user agent はキャッシュしたレスポンスの fingerprint key を集め、計算した結果を Cache-Fingerprint ヘッダで送ることで、サーバにキャッシュしているファイルを伝えることができます。
 
-user agent は fingerprint がキャッシュされて無くてもこのヘッダをかならず送る。
+計算方法は以下です。
 
-user agent が "Cache-Fingerprint" ヘッダを送った場合、 value は以下の用に処理される。
+1. collect the values of "Cache-Fingerprint-Key" header fields in the cached HTTP responses sent from the origin server to which the header field is going to be sent
+2. if number of collected keys is zero (0), go to step 9
+3. algebraically sort the collected keys
+4. determine the parameter of Golomb-Rice coding to be used [Golomb].[Rice]. The value MUST be a power of two (2), between one (1) to 2147483648.
+5. calculate log2 of the parameter determined in step 4 as a 5-bit value
+6. encode the first key using Golomb-Rice coding with parameter determined in step 4
+7. if number of collected keys is one (1), go to step 9
+8. for every collected key expect for the first key, encode the delta from the previous key minus one (1) using Golom-Rice coding with parameter determined in step 4
+9. concatenate the result of step 4, 6, 8 and encode the result using base64url [RFC4648]. Padding of base64url MAY be omitted.
 
-1. キャッシュされたレスポンスから "Cache-Fingerprint-Key" を集め、
-2. なかったら 9 へ
-3. key を代数ソートする
-4. Golomb-Rice coding でパラメータを導出する。値は 2 の累乗で 1~2147483648 の範囲。
-5. 4 の結果の log2 を 5-bit 値で導出
-6. 4 の結果のキーを Golomb-Rice coding でエンコード
-7. 結果が 1 つなら 9 へ
-8. 最初のキー以外のキーを、一つ前のキーから
+1. キャッシュしたレスポンスの Cache-Fingerprint-Key ヘッダを集める
+2. キャッシュが無かったら 9 へ
+3. キーをソートする
+4. Golomb-Rice coding で使うパラメータを決定する。 値は 2 の累乗かつ 1~2^31 の範囲とすべき
+5. step 4 で求めたパラメータの log2 を 5-bit 値として計算する
+6. 最初のキーを step 4 で求めたパラメータを使い Golomb-Rice でエンコードする
+7. key の数が 1 つなら step 9 へ
+8. 最初のキーを除いた全てのキーにおてい、 step 4 で求めたパラメータを使い  Golomb-Rice コーディングでエンコードし、前の値との差分を計算し、 -1 した値を出す。
+9. 4, 6, 8 の結果を連結し、 base64url でエンコードする(padding は削除する)
+
+TODO: 8 が何か長い
+TODO: 9 は 5,6,8?
+
+この Cache-Fingerprint-Key の値の導出方法を
+> - https://github.com/h2o/h2o/blob/v1.5.3/lib/http2/casper.c#L36 （casper->capcity_bits == 13）に
+> - golombset の演算を古いやりかたに
+変更したものが、h2o の casper です
+
+
+例として、 Cache-Fingerprint-Key として `115, 923` の二つがありパラメータを 512(2^9) とした場合。
+
+log2(512) = 9 = 1001
+
+
+
+値の距離を計算すると
+
+```
+[115, 808]
+```
+
+二番目以降は -1 する
+
+
+```
+[115, 807]
+```
+
+
+
+それぞれを 512 で割る
+
+115 / 512 = 0...115
+807 / 512 = 1...295
+
+ u   bit
+ 0   0,0111,0011
+10   1,0010,0111
+
+1001000111001110100100111
+
+
+
+41cf89ff
+100,0001,1100,1111,1000,1001,1111,1111
+
+
+
+```
+Cache-Fingerprint: Qc+J/w
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
