@@ -274,27 +274,29 @@ user agent はキャッシュしたレスポンスの fingerprint key を集め�
 
 計算方法は以下です。
 
-1. collect the values of "Cache-Fingerprint-Key" header fields in the cached HTTP responses sent from the origin server to which the header field is going to be sent
-2. if number of collected keys is zero (0), go to step 9
+1. collect the values of “Cache-Fingerprint-Key” header fields from all the cached responses of the same origin
+2. if number of collected keys is zero (0), go to step 10
 3. algebraically sort the collected keys
 4. determine the parameter of Golomb-Rice coding to be used [Golomb].[Rice]. The value MUST be a power of two (2), between one (1) to 2147483648.
 5. calculate log2 of the parameter determined in step 4 as a 5-bit value
 6. encode the first key using Golomb-Rice coding with parameter determined in step 4
 7. if number of collected keys is one (1), go to step 9
 8. for every collected key expect for the first key, encode the delta from the previous key minus one (1) using Golom-Rice coding with parameter determined in step 4
-9. concatenate the result of step 4, 6, 8 and encode the result using base64url [RFC4648]. Padding of base64url MAY be omitted.
+9. concatenate the result of step 4, 6, 8
+10. if number of bits contained in the result of step 9 is not a multiple of eight (8), append a bit set until the length becomes a multiple of eight (8)
+
 
 1. キャッシュしたレスポンスの Cache-Fingerprint-Key ヘッダを集める
-2. キャッシュが無かったら 9 へ
+2. キャッシュが無かったら 10 へ
 3. キーをソートする
 4. Golomb-Rice coding で使うパラメータを決定する。 値は 2 の累乗かつ 1~2^31 の範囲とすべき
 5. step 4 で求めたパラメータの log2 を 5-bit 値として計算する
 6. 最初のキーを step 4 で求めたパラメータを使い Golomb-Rice でエンコードする
 7. key の数が 1 つなら step 9 へ
-8. 最初のキーを除いた全てのキーにおてい、 step 4 で求めたパラメータを使い  Golomb-Rice コーディングでエンコードし、前の値との差分を計算し、 -1 した値を出す。
-9. 4, 6, 8 の結果を連結し、 base64url でエンコードする(padding は削除する)
+8. 最初のキーを除いた全てのキーにおてい、前の値との差分を計算し、 -1 した値を、 step 4 で求めたパラメータを使い Golomb-Rice コーディングでエンコードする。
+9. 4, 6, 8 の結果を連結する。
+10. step 9 の結果の bit の数が 8 の倍数じゃない場合、 8 の倍数になるまで bit を追加する。
 
-TODO: 8 が何か長い
 TODO: 9 は 5,6,8?
 
 この Cache-Fingerprint-Key の値の導出方法を
@@ -303,10 +305,15 @@ TODO: 9 は 5,6,8?
 変更したものが、h2o の casper です
 
 
-例として、 Cache-Fingerprint-Key として `115, 923` の二つがありパラメータを 512(2^9) とした場合。
+```
+115, 923
+```
 
-log2(512) = 9 = 1001
+parameter 256
 
+例として、 Cache-Fingerprint-Key として `115, 923` の二つがありパラメータを 256(2^8) とした場合。
+
+log2(256) = 8 = 1000
 
 
 値の距離を計算すると
@@ -324,21 +331,30 @@ log2(512) = 9 = 1001
 
 
 
-それぞれを 512 で割る
+それぞれを 256 で割る
 
-115 / 512 = 0...115
-807 / 512 = 1...295
+115 / 256 = 0...115
+807 / 256 = 3... 39
 
- u   bit
- 0   0,0111,0011
-10   1,0010,0111
-
-1001000111001110100100111
+  u   bit
+  0   0111,0011
+1110  0010,0111
 
 
+0111,0011,1110,0010,0111
 
-41cf89ff
-100,0001,1100,1111,1000,1001,1111,1111
+
+41 cf 89 ff
+0100,0001 0x41 65
+1100,1111 0xCF 207
+1000,1001 0x89 137
+1111,1111 0xFF 255
+
+0   1000,0011
+10  0111,1100
+010 011111,1111
+
+
 
 
 
