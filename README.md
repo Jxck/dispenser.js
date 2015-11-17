@@ -274,7 +274,7 @@ user agent はキャッシュしたレスポンスの fingerprint key を集め�
 
 計算方法は以下です。
 
-1. collect the values of “Cache-Fingerprint-Key” header fields from all the cached responses of the same origin
+1. collect the values of "Cache-Fingerprint-Key" header fields from all the cached responses of the same origin
 2. if number of collected keys is zero (0), go to step 10
 3. algebraically sort the collected keys
 4. determine the parameter of Golomb-Rice coding to be used [Golomb].[Rice]. The value MUST be a power of two (2), between one (1) to 2147483648.
@@ -288,7 +288,7 @@ user agent はキャッシュしたレスポンスの fingerprint key を集め�
 
 1. キャッシュしたレスポンスの Cache-Fingerprint-Key ヘッダを集める
 2. キャッシュが無かったら 10 へ
-3. キーをソートする
+3. キーを数値順でソートする
 4. Golomb-Rice coding で使うパラメータを決定する。 値は 2 の累乗かつ 1~2^31 の範囲とすべき
 5. step 4 で求めたパラメータの log2 を 5-bit 値として計算する
 6. 最初のキーを step 4 で求めたパラメータを使い Golomb-Rice でエンコードする
@@ -299,10 +299,11 @@ user agent はキャッシュしたレスポンスの fingerprint key を集め�
 
 TODO: 9 は 5,6,8?
 
-この Cache-Fingerprint-Key の値の導出方法を
-> - https://github.com/h2o/h2o/blob/v1.5.3/lib/http2/casper.c#L36 （casper->capcity_bits == 13）に
-> - golombset の演算を古いやりかたに
-変更したものが、h2o の casper です
+
+"Cache-Fingerprint-Key" が無かったら、空の値を送る。
+
+もし key が `[115, 923]` で、パラメータが `256` だった場合はこうなる。
+
 
 
 ```
@@ -313,7 +314,7 @@ parameter 256
 
 例として、 Cache-Fingerprint-Key として `115, 923` の二つがありパラメータを 256(2^8) とした場合。
 
-log2(256) = 8 = 1000
+log2(256) = 8
 
 
 値の距離を計算すると
@@ -323,40 +324,41 @@ log2(256) = 8 = 1000
 ```
 
 二番目以降は -1 する
+(元の golombset のブログでは -1 してないが、距離の最小値は 1 なので引いている)
 
 
 ```
 [115, 807]
 ```
 
-
-
 それぞれを 256 で割る
 
+```
 115 / 256 = 0...115
 807 / 256 = 3... 39
 
-  u   bit
-  0   0111,0011
+   u  bit
+   0  0111,0011
 1110  0010,0111
+```
 
 
-0111,0011,1110,0010,0111
+この値と、 log2(256)=8 を 5bit にした 01000 を連結し、最後が 8 の倍数になるまで 1 を追加する。
 
 
-41 cf 89 ff
-0100,0001 0x41 65
-1100,1111 0xCF 207
-1000,1001 0x89 137
-1111,1111 0xFF 255
+```
+0100,0001,1100,1111,1000,1001,1111,1111
+8-----115-------807-------------pad----
+```
 
-0   1000,0011
-10  0111,1100
-010 011111,1111
+結果これが求まる。
 
+```
+41 cf 89 ff    (16)
+65 207 137 255 (10)
+```
 
-
-
+これを文字列にシリアライズしたいが、 URL safe にするため、 base64URL を用いて変換するとこうなる。
 
 ```
 Cache-Fingerprint: Qc+J/w
@@ -365,31 +367,30 @@ Cache-Fingerprint: Qc+J/w
 
 
 
+User agents MAY run the steps more than once with different values selected as the parameter used for Golomb-Rice coding, and send the shortest output as the value of the header.
+
+User agent はこのステップを異なる値で複数回実行し、最小の値になるパラメータを探すだろう。
+
+
+Or it MAY use the result of the following equation rounded to the nearest power of two (2).
+もしくは、以下のように二の累乗の近似値を使う。
+
+
+It can be shown that the parameter chosen using this equation will yield the shortest output when the keys are distributed geometrically.
+
+この近似で選ばれた parameter は、 key が幾何分布している場合 最小の output になる。
+
+
+```
+log2(maximum_value_of_collected_keys / number_of_collected_keys)
+```
 
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+```
+この Cache-Fingerprint-Key の値の導出方法を
+> - https://github.com/h2o/h2o/blob/v1.5.3/lib/http2/casper.c#L36 （casper->capcity_bits == 13）に
+> - golombset の演算を古いやりかたに
+変更したものが、h2o の casper です
+```
