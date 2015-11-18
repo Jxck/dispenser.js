@@ -1,3 +1,4 @@
+'use strict';
 if ('ServiceWorkerGlobalScope' in self && self instanceof ServiceWorkerGlobalScope) {
   console.log(self);
 
@@ -9,7 +10,8 @@ if ('ServiceWorkerGlobalScope' in self && self instanceof ServiceWorkerGlobalSco
 
   self.addEventListener('fetch', (ev) => {
     let req = ev.request;
-    console.log('fetch', req.method, req.url, ev);
+    console.log('fetch', req.method, req.url, req);
+    console.log(Array.from(req.headers.entries()).map(e => e.join(':')).join('\n'));
   });
 
   self.addEventListener('install', (ev) => {
@@ -36,7 +38,7 @@ if (typeof window !== 'undefined') {
       });
     }).catch(console.error.bind(console));
 
-    navigator.serviceWorker.register('casp.js',  {scope: '.'}).then((worker) => {
+    navigator.serviceWorker.register('casper.js',  {scope: '.'}).then((worker) => {
       console.log('register success:', worker);
 
       // return navigator.serviceWorker.ready;
