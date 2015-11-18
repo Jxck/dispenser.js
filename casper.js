@@ -1,4 +1,16 @@
 'use strict';
+
+function payload(req) {
+  return `${req.method} ${req.url}` + '\n' +
+          Array.from(req.headers.entries())
+               .map((e) => {
+                 if (e[0] === 'user-agent') {
+                   e[1] = e[1].substr(0, 6);
+                 }
+                 return e.join(': ');
+               }).join('\n');
+}
+
 if ('ServiceWorkerGlobalScope' in self && self instanceof ServiceWorkerGlobalScope) {
   console.log(self);
 
@@ -11,7 +23,7 @@ if ('ServiceWorkerGlobalScope' in self && self instanceof ServiceWorkerGlobalSco
   self.addEventListener('fetch', (ev) => {
     let req = ev.request;
     console.log('fetch', req.method, req.url, req);
-    console.log(Array.from(req.headers.entries()).map(e => e.join(':')).join('\n'));
+    console.info(payload(req));
   });
 
   self.addEventListener('install', (ev) => {
@@ -33,6 +45,8 @@ if (typeof window !== 'undefined') {
 
     navigator.serviceWorker.getRegistration().then((worker) => {
       console.log('getRegistration:', worker);
+
+      if (worker === undefined) return;
       worker.addEventListener('updatefound', (ev) => {
         console.log('updatefound', ev);
       });
