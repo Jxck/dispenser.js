@@ -1,4 +1,4 @@
-"use strict";
+'use strict';
 
 /*
  *  0  000000  A   16  010000  Q   32  100000  g   48  110000  w
@@ -19,9 +19,9 @@
  * 15  001111  P   31  011111  f   47  101111  v   63  111111  _
  */
 function base64url_encode(buf) {
-  const TOKENS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+  const TOKENS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
 
-  let str = "";
+  let str = '';
   let quad;
   while (buf.length > 2) {
     // concat 3 byte (4 token for base64)
@@ -51,65 +51,69 @@ function base64url_encode(buf) {
 }
 
 function test() {
-  ((byte3) => {
+  (() => {
+    // 3 byte test
     let buf = new Uint8Array([
-       0x41 // 0100,0001 0x41 65
-      ,0xcf // 1100,1111 0xCF 207
-      ,0x89 // 1000,1001 0x89 137
+      0x41, // 0100,0001 0x41 65
+      0xcf, // 1100,1111 0xCF 207
+      0x89, // 1000,1001 0x89 137
     ]);
 
     let base64 = base64url_encode(buf);
-    // console.log(`"${buf.join(" ")}" = "${base64}"`);
-    console.assert(base64 === "Qc-J");
+    // console.log(`'${buf.join(' ')}' = '${base64}'`);
+    console.assert(base64 === 'Qc-J');
   })();
 
-  ((byte4) => {
+  (() => {
+    // 4 byte test
     let buf = new Uint8Array([
-       0x41 // 0100,0001 0x41 65
-      ,0xcf // 1100,1111 0xCF 207
-      ,0x89 // 1000,1001 0x89 137
-      ,0xff // 1111,1111 0xFF 255
+      0x41,  // 0100,0001 0x41 65
+      0xcf,  // 1100,1111 0xCF 207
+      0x89,  // 1000,1001 0x89 137
+      0xff,  // 1111,1111 0xFF 255
     ]);
 
     let base64 = base64url_encode(buf);
-    // console.log(`"${buf.join(" ")}" = "${base64}"`);
-    console.assert(base64 === "Qc-J_w");
+    // console.log(`'${buf.join(' ')}' = '${base64}'`);
+    console.assert(base64 === 'Qc-J_w');
   })();
 
-  ((byte5) => {
+  (() => {
+    // 5 byte test
     let buf = new Uint8Array([
-       0x41 // 0100,0001 0x41 65
-      ,0xcf // 1100,1111 0xCF 207
-      ,0x89 // 1000,1001 0x89 137
-      ,0xff // 1111,1111 0xFF 255
-      ,0x43 // 0100,0011 0x43 67
+      0x41, // 0100,0001 0x41 65
+      0xcf, // 1100,1111 0xCF 207
+      0x89, // 1000,1001 0x89 137
+      0xff, // 1111,1111 0xFF 255
+      0x43, // 0100,0011 0x43 67
     ]);
 
     let base64 = base64url_encode(buf);
-    // console.log(`"${buf.join(" ")}" = "${base64}"`);
-    console.assert(base64 === "Qc-J_0M");
+    // console.log(`'${buf.join(' ')}' = '${base64}'`);
+    console.assert(base64 === 'Qc-J_0M');
   })();
 
-  ((more) => {
+  (() => {
+    // more test
     let buf = new Uint8Array([
-       0x41 // 0100,0001 0x41 65
-      ,0xcf // 1100,1111 0xCF 207
-      ,0x89 // 1000,1001 0x89 137
-      ,0xff // 1111,1111 0xFF 255
-      ,0x43 // 0100,0011 0x43 67
-      ,0x55 // 0101,0101 0x55 85
-      ,0x0f // 0000,1111 0x0f 15
-      ,0x7e // 0111,1110 0x7e 126
+      0x41, // 0100,0001 0x41 65
+      0xcf, // 1100,1111 0xCF 207
+      0x89, // 1000,1001 0x89 137
+      0xff, // 1111,1111 0xFF 255
+      0x43, // 0100,0011 0x43 67
+      0x55, // 0101,0101 0x55 85
+      0x0f, // 0000,1111 0x0f 15
+      0x7e, // 0111,1110 0x7e 126
     ]);
 
     let base64 = base64url_encode(buf);
-    // console.log(`"${buf.join(" ")}" = "${base64}"`);
-    console.assert(base64 === "Qc-J_0NVD34");
+    // console.log(`'${buf.join(' ')}' = '${base64}'`);
+    console.assert(base64 === 'Qc-J_0NVD34');
   })();
 }
 
-console.time('bench')
-for (let i=0; i<10000; i++) {
+console.time('bench');
+for (let i = 0; i < 10000; i++) {
   test(); // 125ms
 }
 console.timeEnd('bench');
