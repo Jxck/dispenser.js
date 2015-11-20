@@ -112,8 +112,8 @@ function test() {
   })();
 }
 
-console.time('bench');
-for (let i = 0; i < 10000; i++) {
-  test(); // 125ms
-}
-console.timeEnd('bench');
+// console.time('bench');
+// for (let i = 0; i < 10000; i++) {
+//   test(); // 125ms
+// }
+// console.timeEnd('bench');

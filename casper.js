@@ -1,6 +1,14 @@
 'use strict';
 
-function payload(req) {
+function payload(r) {
+  let firstLine = (r) => {
+    if (r instanceof Request) {
+      return `${r.method} ${r.url} HTTP/1.1`;
+    }
+    if (r instanceof Response) {
+      return `HTTP/1.1 ${r.status} ${r.statusText}`;
+    }
+  }
   let headerLine = (headers) => {
     return Array.from(headers.entries())
     .map((e) => {
@@ -11,8 +19,8 @@ function payload(req) {
     }).join('\n');
   };
   return `
-${req.method} ${req.url}
-${headerLine(req.headers)}
+${firstLine(r)}
+${headerLine(r.headers)}
 `;
 }
 
@@ -27,8 +35,11 @@ if ('ServiceWorkerGlobalScope' in self && self instanceof ServiceWorkerGlobalSco
 
   self.addEventListener('fetch', (e) => {
     let req = e.request.clone();
-    console.log('fetch', req.method, req.url, req);
-    console.info(payload(req));
+    console.debug(payload(req));
+
+    fetch(req).then((res) => {
+      console.debug(payload(res));
+    });
   });
 
   self.addEventListener('install', (e) => {
