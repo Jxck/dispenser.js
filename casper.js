@@ -25,31 +25,53 @@ ${headerLine(r.headers)}
 }
 
 if ('ServiceWorkerGlobalScope' in self && self instanceof ServiceWorkerGlobalScope) {
-  console.log(self);
+  importScripts('golombset.js');
+  importScripts('base64url.js');
 
-  ['install', 'activate', 'beforeevicted', 'evicted', 'message', 'push'].forEach((event) => {
-    self.addEventListener(event, (e) => {
-      console.log(event, e);
+  (() => {
+    const CACHE_KEY = 'casper-v1';
+
+    ['install', 'activate', 'beforeevicted', 'evicted', 'message', 'push'].forEach((event) => {
+      self.addEventListener(event, (e) => {
+        console.log(event, e);
+      });
     });
-  });
 
-  self.addEventListener('fetch', (e) => {
-    let req = e.request.clone();
-    console.debug(payload(req));
+    self.addEventListener('fetch', (e) => {
+      let req = e.request.clone();
+      console.debug(payload(req));
 
-    fetch(req).then((res) => {
-      console.debug(payload(res));
+      e.respondWith(
+        caches.open(CACHE_KEY).then((cache) => {
+          return cache.match(req).then((res) => {
+            if (res) {
+              // cache hit
+              console.info(payload(res));
+              return res;
+            }
+
+            // calclate cache-fingerprint
+            return cache.keys().then((requests) => {
+              return Promise.all(requests.map((req) => cache.match(req))).then((responses) => {
+                let fingerprints = responses.map((res) => res.headers.get('cache-fingerprint-key'));
+                let golombset = new Golombset(256);
+                golombset.encode(fingerprints);
+                let base64 = base64url_encode(golombset.buf);
+                console.log(base64);
+
+                // fetch
+                return fetch(req, {headers: {'cache-fingeprint': base64}}).then((res) => {
+                  console.debug(payload(res));
+                  cache.put(req, res.clone());
+                  return res;
+                });
+              });
+            });
+          })
+        })
+      );
     });
-  });
-
-  self.addEventListener('install', (e) => {
-    e.waitUntil(self.skipWaiting());
-  });
-
-  self.addEventListener('activate', (e) => {
-    e.waitUntil(self.clients.claim());
-    console.log('claimed');
-  });
+  })();
 }
 
 if (typeof window !== 'undefined') {
@@ -59,23 +81,9 @@ if (typeof window !== 'undefined') {
       return;
     }
 
-    navigator.serviceWorker.getRegistration().then((worker) => {
-      console.log('getRegistration:', worker);
-
-      if (worker === undefined) return;
-      worker.addEventListener('updatefound', (e) => {
-        console.log('updatefound', e);
-      });
-    }).catch(console.error.bind(console));
-
     navigator.serviceWorker.register('casper.js', { scope: '.' }).then((worker) => {
       console.log('register success:', worker);
-
-      // return navigator.serviceWorker.ready;
-      return new Promise((resolve) => {
-        // controllerchange after claimed
-        navigator.serviceWorker.addEventListener('controllerchange', resolve);
-      });
+      return navigator.serviceWorker.ready;
     }).then(() => {
       console.log('controlled?', navigator.serviceWorker.controller);
     }).catch(console.error.bind(console));
