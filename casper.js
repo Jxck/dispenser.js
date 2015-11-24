@@ -38,55 +38,53 @@ if ('ServiceWorkerGlobalScope' in self && self instanceof ServiceWorkerGlobalSco
     });
 
     self.addEventListener('fetch', (e) => {
-      let init = {
-        headers: new Headers({'X-Own-Header': '123'}),
-      };
-      let req = new Request(e.request, init);
-      console.log(req);
-      console.log(payload(req));
+      let req = e.request.clone();
+      console.debug(payload(req));
 
-      e.respondWith(fetch(req));
+      e.respondWith(
+        caches.open(CACHE_KEY).then((cache) => {
+          return cache.match(req).then((res) => {
+            if (res) {
+              // cache hit
+              console.info(payload(res));
+              return res;
+            }
+
+            // calclate cache-fingerprint
+            return cache.keys().then((requests) => {
+              return Promise.all(requests.map((req) => cache.match(req))).then((responses) => {
+                // collect & sort finger-print-key
+                let fingerprints = responses.map((res) => res.headers.get('cache-fingerprint-key')).sort;
+
+                // encode golombset
+                let golombset = new Golombset(256);
+                golombset.encode(fingerprints);
+
+                // encode base64url
+                let base64 = base64url_encode(golombset.buf);
+
+                // add cache-fingerprint
+                let init = {
+                  headers: new Headers({ 'Cache-Fingeprint': base64 }),
+                };
+                let req = new Request(e.request, init);
+                console.log(req);
+                console.log(payload(req));
+
+                // fetch
+                return fetch(req).then((res) => {
+                  console.debug(payload(res));
+
+                  // add to cache
+                  cache.put(req, res.clone());
+                  return res;
+                });
+              });
+            });
+          })
+        })
+      );
     });
-
-    //   e.respondWith(
-    //     caches.open(CACHE_KEY).then((cache) => {
-    //       return cache.match(req).then((res) => {
-    //         if (res) {
-    //           // cache hit
-    // self.addEventListener('fetch', (e) => {
-    //   let req = e.request.clone();
-    //   console.debug(payload(req));
-
-    //   e.respondWith(
-    //     caches.open(CACHE_KEY).then((cache) => {
-    //       return cache.match(req).then((res) => {
-    //         if (res) {
-    //           // cache hit
-    //           console.info(payload(res));
-    //           return res;
-    //         }
-
-    //         // calclate cache-fingerprint
-    //         return cache.keys().then((requests) => {
-    //           return Promise.all(requests.map((req) => cache.match(req))).then((responses) => {
-    //             let fingerprints = responses.map((res) => res.headers.get('cache-fingerprint-key'));
-    //             let golombset = new Golombset(256);
-    //             golombset.encode(fingerprints);
-    //             let base64 = base64url_encode(golombset.buf);
-    //             console.log(base64);
-
-    //             // fetch
-    //             return fetch(req, {headers: {'cache-fingeprint': base64}}).then((res) => {
-    //               console.debug(payload(res));
-    //               cache.put(req, res.clone());
-    //               return res;
-    //             });
-    //           });
-    //         });
-    //       })
-    //     })
-    //   );
-    // });
   })();
 }
 
@@ -97,7 +95,13 @@ if (typeof window !== 'undefined') {
       return;
     }
 
-    navigator.serviceWorker.register('casper.js', { scope: '.' }).then((worker) => {
+    navigator.serviceWorker.getRegistration().then((worker) => {
+      console.log('getRegistration', worker);
+
+      if (worker) return worker;
+
+      return navigator.serviceWorker.register('casper.js', { scope: '.' });
+    }).then((worker) => {
       console.log('register success:', worker);
       return navigator.serviceWorker.ready;
     }).then(() => {
