@@ -33,52 +33,57 @@ if ('ServiceWorkerGlobalScope' in self && self instanceof ServiceWorkerGlobalSco
 
     ['install', 'activate', 'beforeevicted', 'evicted', 'message', 'push'].forEach((event) => {
       self.addEventListener(event, (e) => {
-        console.log(event, e);
+        console.info(event, e);
       });
     });
 
     self.addEventListener('fetch', (e) => {
       let req = e.request.clone();
-      console.debug(payload(req));
 
       e.respondWith(
         caches.open(CACHE_KEY).then((cache) => {
           return cache.match(req).then((res) => {
             if (res) {
               // cache hit
-              console.info(payload(res));
+              console.log('cache hit');
               return res;
             }
 
             // calclate cache-fingerprint
             return cache.keys().then((requests) => {
-              return Promise.all(requests.map((req) => cache.match(req))).then((responses) => {
-                // collect & sort finger-print-key
-                let fingerprints = responses.map((res) => res.headers.get('cache-fingerprint-key')).sort;
+              return Promise.all(requests.map((req) => cache.match(req)));
+            }).then((responses) => {
+              if (responses.length === 0) return '';
 
-                // encode golombset
-                let golombset = new Golombset(256);
-                golombset.encode(fingerprints);
+              // collect & sort finger-print-key
+              let fingerprints = responses.map((response) => response.headers.get('cache-fingerprint-key')).sort();
 
-                // encode base64url
-                let base64 = base64url_encode(golombset.buf);
+              console.log('fingerprints', fingerprints);
 
-                // add cache-fingerprint
-                let init = {
-                  headers: new Headers({ 'Cache-Fingeprint': base64 }),
-                };
-                let req = new Request(e.request, init);
-                console.log(req);
-                console.log(payload(req));
+              // encode golombset
+              let golombset = new Golombset(256);
+              golombset.encode(fingerprints);
 
-                // fetch
-                return fetch(req).then((res) => {
-                  console.debug(payload(res));
+              // encode base64url
+              let base64 = base64url_encode(golombset.buf);
 
-                  // add to cache
-                  cache.put(req, res.clone());
-                  return res;
-                });
+              return base64;
+            }).then((cookie) => {
+              console.log('cookie', cookie);
+
+              // add cache-fingerprint
+              let init = {
+                headers: new Headers({ 'Cache-Fingeprint': cookie }),
+              };
+              let req = new Request(e.request, init);
+              console.debug(req);
+              console.debug(payload(req));
+
+              // fetch
+              return fetch(req).then((res) => {
+                // add to cache
+                cache.put(req, res.clone());
+                return res;
               });
             });
           })
