@@ -107,7 +107,7 @@ if (typeof window !== 'undefined') {
 
       return navigator.serviceWorker.register('casper.js', { scope: '.' });
     }).then((worker) => {
-      console.log('register success:', worker);
+      console.log('get worker success:', worker);
       return navigator.serviceWorker.ready;
     }).then(() => {
       console.log('controlled?', navigator.serviceWorker.controller);

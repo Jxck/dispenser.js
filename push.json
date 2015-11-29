@@ -1,0 +1,10 @@
+{
+  "/main.html": {
+    "/1.css": {
+      "type": "style"
+    },
+    "/2.css": {
+      "type": "style"
+    }
+  }
+}
