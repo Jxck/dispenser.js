@@ -94,7 +94,7 @@ if ('ServiceWorkerGlobalScope' in self && self instanceof ServiceWorkerGlobalSco
 }
 
 if (typeof window !== 'undefined') {
-  (() => {
+  (function() => {
     if (!('serviceWorker' in navigator)) {
       console.error('service worker not supported');
       return;
