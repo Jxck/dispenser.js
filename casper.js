@@ -28,7 +28,7 @@ if ('ServiceWorkerGlobalScope' in self && self instanceof ServiceWorkerGlobalSco
   importScripts('golombset.js');
   importScripts('base64url.js');
 
-  (() => {
+  (function() {
     const CACHE_KEY = 'casper-v1';
 
     ['install', 'activate', 'beforeevicted', 'evicted', 'message', 'push'].forEach((event) => {
