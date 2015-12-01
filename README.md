@@ -5,4 +5,4 @@
 # License
 
 The MIT License (MIT)
-Copyright (c) 2013 Jxck
+Copyright (c) 2015 Jxck
