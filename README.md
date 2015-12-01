@@ -428,3 +428,148 @@ log2(maximum_value_of_collected_keys / number_of_collected_keys)
 
 これにより、 SW で発行した fetch がブラウザキャッシュにヒットしたときに Cache API に移され、ブラウザキャッシュを JS で管理している状態に近づけます。
 また、サーバにキャッシュの情報を正確に伝えることで、無駄な Push を減らすことができます。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+まず、以下のように h2o を設定し、 mruby で link タグを追加します。
+これが push されているかは、 chrome://net-internals で確認できます。
+
+
+TODO: push.conf
+
+
+h2o のログはこうなります。
+```
+127.0.0.1 - - [01/Dec/2015:22:10:36 +0900] "GET /1.css HTTP/2" 200 23 pushed
+127.0.0.1 - - [01/Dec/2015:22:10:36 +0900] "GET /2.css HTTP/2" 200 27 pushed
+127.0.0.1 - - [01/Dec/2015:22:10:36 +0900] "GET /main.html HTTP/2" 200 7774 -
+```
+
+
+```
+t=1386045 [st=    0]    HTTP2_SESSION_SEND_HEADERS
+                        --> fin = true
+                        --> :authority: 127.0.0.1:3000
+                            :method: GET
+                            :path: /main.html
+                            :scheme: https
+                            accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8
+                            accept-encoding: gzip, deflate, sdch
+                            accept-language: en-US,en;q=0.8,ja;q=0.6
+                            cache-control: max-age=0
+                            upgrade-insecure-requests: 1
+                            user-agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/46.0.2490.86 Safari/537.36
+                        --> priority = 0
+                        --> stream_id = 1
+                        --> unidirectional = false
+t=1386045 [st=    0]    HTTP2_SESSION_RECV_PUSH_PROMISE
+                        --> :authority: 127.0.0.1:3000
+                            :method: GET
+                            :path: /1.css
+                            :scheme: https
+                            accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8
+                            accept-encoding: gzip, deflate, sdch
+                            accept-language: en-US,en;q=0.8,ja;q=0.6
+                            user-agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/46.0.2490.86 Safari/537.36
+                        --> id = 1
+                        --> promised_stream_id = 2
+t=1386045 [st=    0]    HTTP2_SESSION_RECV_HEADERS
+                        --> fin = false
+                        --> :status: 200
+                            accept-ranges: bytes
+                            cache-fingerprint-key: 7351
+                            content-length: 23
+                            content-type: text/css
+                            date: Tue, 01 Dec 2015 13:10:36 GMT
+                            etag: "5643ea29-17"
+                            last-modified: Thu, 12 Nov 2015 01:23:53 GMT
+                            server: h2o/1.6.0-beta1
+                            x-http2-push: pushed
+                        --> stream_id = 2
+t=1386045 [st=    0]    HTTP2_SESSION_RECV_PUSH_PROMISE
+                        --> :authority: 127.0.0.1:3000
+                            :method: GET
+                            :path: /2.css
+                            :scheme: https
+                            accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8
+                            accept-encoding: gzip, deflate, sdch
+                            accept-language: en-US,en;q=0.8,ja;q=0.6
+                            user-agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/46.0.2490.86 Safari/537.36
+                        --> id = 1
+                        --> promised_stream_id = 4
+t=1386045 [st=    0]    HTTP2_SESSION_RECV_HEADERS
+                        --> fin = false
+                        --> :status: 200
+                            accept-ranges: bytes
+                            cache-fingerprint-key: 4710
+                            content-length: 27
+                            content-type: text/css
+                            date: Tue, 01 Dec 2015 13:10:36 GMT
+                            etag: "5654b166-1b"
+                            last-modified: Tue, 24 Nov 2015 18:50:14 GMT
+                            server: h2o/1.6.0-beta1
+                            x-http2-push: pushed
+                        --> stream_id = 4
+t=1386046 [st=    1]    HTTP2_SESSION_RECV_HEADERS
+                        --> fin = false
+                        --> :status: 200
+                            accept-ranges: bytes
+                            content-length: 7774
+                            content-type: text/html
+                            date: Tue, 01 Dec 2015 13:10:36 GMT
+                            etag: "565e3110-1e5e"
+                            last-modified: Tue, 01 Dec 2015 23:45:20 GMT
+                            link: </1.css>; rel=preload</2.css>; rel=preload
+                            server: h2o/1.6.0-beta1
+                            set-cookie: [64 bytes were stripped]
+                        --> stream_id = 1
+t=1396049 [st=10004]    HTTP2_SESSION_GOAWAY
+                        --> active_streams = 1
+                        --> last_accepted_stream_id = 1
+                        --> status = 0
+                        --> unclaimed_streams = 1
+```
+
+
+ここでもう一度ページを表示すると、 net-internals では HEADERS が飛び css を取りにいきます。
+しかし、それがブラウザキャッシュにヒットするため devtools で見ると `from cache` になっているはずです。
+(リロードではなくリンクなどで訪れないと、強制的に取得がいってしまうので注意)
+
+これでキャッシュがきちんとヒットしていることがわかりました。
+
+一方サーバのログを見てみると、 h2o は push をしようとしてキャンセルしていることがわかります。
+これが、 Cookie に付与された `h2o_casper` に仕込んでおいた値を見て、 push の必要が無いと判断している証拠です。
+
+
+
+
+
+
+
+
+つまりこれだけでも動いているのですが、問題は、 Cookie の h2o_casper が示すファイルが、ブラウザのキャッシュから消えている場合です。
+ためしに Cookie を残した状態でブラウザのキャッシュを history から消してみます。
+
+h2o は push をキャンセルしますが、実際に GET が来るため response を返します。
+
+
+
+
+
